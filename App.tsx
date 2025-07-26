@@ -7,9 +7,9 @@ import { getFirestore, doc, setDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: 'AIzaSyABWthQjkzaRQL7HFQv_LayVdvWK4dZNX8',
-  authDomain: 'trilha-nacional.firebaseapp.com',
+  authDomain: 'https://github.com/firebase/firebase-ios-sdk',
   projectId: 'trilha-nacional-3ecee',
-  storageBucket: 'trilha-nacional.appspot.com',
+  storageBucket: 'trilha-nacional-3ecee.firebasestorage.app',
   messagingSenderId: '6939870526',
   appId: '1:6939870526:ios:de749390dae6ef5c59586f',
 };

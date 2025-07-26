@@ -27,56 +27,42 @@ const port = 3000;
 app.use(express.json()); // Habilita o Express a ler JSON no corpo das requisições
 
 // Rota para receber dados de localização
+// Dentro da sua rota app.post('/location', ...) no server.js
 app.post('/location', (req, res) => {
-  const { latitude, longitude } = req.body; // Pega latitude e longitude do corpo da requisição
-  console.log(`Recebido: Lat ${latitude}, Lon ${longitude}`);
+  const { latitude, longitude } = req.body; // Latitude e longitude do usuário recebidas do App.js
+  console.log(`Recebido do App.js: Lat ${latitude}, Lon ${longitude}`);
 
-  // *** AQUI VOCÊ VAI USAR O FIREBASE ADMIN SDK! ***
+  // Salva a localização do usuário no Firestore (opcional, App.js já salva a combinada)
+  // Você pode querer uma coleção separada para localizações de usuários, por exemplo.
+  // const db = admin.firestore();
+  // db.collection('user_locations').add({
+  //   latitude: latitude,
+  //   longitude: longitude,
+  //   timestamp: admin.firestore.FieldValue.serverTimestamp()
+  // }).then(() => console.log('Localização do usuário salva por server.js'));
 
-  // Opção 1: Salvar a localização no Cloud Firestore (recomendado para a maioria dos casos)
-  const db = admin.firestore();
-  db.collection('locations').add({
-    latitude: latitude,
-    longitude: longitude,
-    timestamp: admin.firestore.FieldValue.serverTimestamp() // Timestamp gerado pelo servidor
-  })
-  .then(() => {
-    console.log('Localização salva no Firestore!');
-    // Apenas envia a resposta DEPOIS que os dados forem salvos com sucesso
-    res.send('Localização recebida e salva com sucesso no Firestore!');
-  })
-  .catch((error) => {
-    console.error('Erro ao salvar localização no Firestore:', error);
-    // Em caso de erro, envia um status 500
-    res.status(500).send('Erro ao processar sua solicitação e salvar no Firestore.');
+  // *** IMPORTANTE: Simula a resposta do "ESP32" ***
+  // Aqui você retornaria dados reais do ESP32 se ele enviasse para este servidor.
+  // Por enquanto, vamos simular:
+  const mockEsp32Lat = -23.562913; // Ex: Uma localização próxima ao Masp, para simular o ESP32
+  const mockEsp32Lon = -46.626880;
+  const mockDistance = Math.floor(Math.random() * 200) + 50; // Distância aleatória entre 50 e 250 cm
+
+  // Envia a resposta JSON que o App.js espera
+  res.json({
+    esp_latitude: mockEsp32Lat,
+    esp_longitude: mockEsp32Lon,
+    distancia_cm: mockDistance
   });
 
-
-  /*
-  // Opção 2: Salvar a localização no Realtime Database (descomente para usar este)
-  // Certifique-se de que databaseURL esteja configurado em admin.initializeApp() se usar o RTDB.
-  // E comente a seção do Cloud Firestore acima se for usar esta.
-
-  const dbRT = admin.database();
-  dbRT.ref('locations').push({ // .push() cria uma chave única para cada entrada
-    latitude: latitude,
-    longitude: longitude,
-    timestamp: admin.database.ServerValue.TIMESTAMP // Timestamp gerado pelo servidor (melhor que Date.now())
-  })
-  .then(() => {
-    console.log('Localização salva no Realtime Database!');
-    res.send('Localização recebida e salva com sucesso no Realtime Database!');
-  })
-  .catch((error) => {
-    console.error('Erro ao salvar localização no Realtime Database:', error);
-    res.status(500).send('Erro ao processar sua solicitação e salvar no Realtime Database.');
-  });
-  */
-
-  // IMPORTANTE: Removi a linha 'res.send("Localização recebida com sucesso!");'
-  // que estava fora do bloco .then/.catch, pois ela causaria um erro
-  // (tentativa de enviar resposta múltiplas vezes).
-  // A resposta agora é enviada apenas DENTRO do .then ou .catch da operação do banco de dados.
+  // Se você também quiser salvar o mock no Realtime DB, faça aqui:
+  // const dbRT = admin.database();
+  // dbRT.ref('esp32_data').push({
+  //   latitude: mockEsp32Lat,
+  //   longitude: mockEsp32Lon,
+  //   distancia_cm: mockDistance,
+  //   timestamp: admin.database.ServerValue.TIMESTAMP
+  // });
 
 });
 

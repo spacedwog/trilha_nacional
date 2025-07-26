@@ -6,18 +6,18 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: 'SUA_API_KEY',
-  authDomain: 'seu-app.firebaseapp.com',
-  projectId: 'seu-app',
-  storageBucket: 'seu-app.appspot.com',
-  messagingSenderId: '1234567890',
-  appId: '1:1234567890:web:abcdefghij',
+  apiKey: 'AIzaSyABWthQjkzaRQL7HFQv_LayVdvWK4dZNX8',
+  authDomain: 'trilha-nacional.firebaseapp.com',
+  projectId: 'trilha-nacional-3ecee',
+  storageBucket: 'trilha-nacional.appspot.com',
+  messagingSenderId: '6939870526',
+  appId: '1:6939870526:ios:de749390dae6ef5c59586f',
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-const ESP32_URL = 'http://192.168.15.166/location'; // 🧠 Modo STA do ESP32
+const ESP32_URL = 'http://192.168.15.166/location'; // ✅ Endereço do ESP32
 
 export default function App() {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
@@ -25,6 +25,7 @@ export default function App() {
   const [ultrasonicDistance, setUltrasonicDistance] = useState<number | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Obter localização do usuário ao iniciar
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -40,7 +41,12 @@ export default function App() {
         console.warn('Erro ao obter localização, usando fallback:', err);
         setUserLocation({
           coords: {
-            latitude: -23.561684, longitude: -46.625378, accuracy: 0, altitude: 0, heading: 0, speed: 0,
+            latitude: -23.561684,
+            longitude: -46.625378,
+            accuracy: 0,
+            altitude: 0,
+            heading: 0,
+            speed: 0,
             altitudeAccuracy: null
           },
           timestamp: Date.now(),
@@ -49,6 +55,7 @@ export default function App() {
     })();
   }, []);
 
+  // Função para salvar dados no Firestore
   const salvarLocalizacaoNoFirebase = async (
     userLat: number,
     userLng: number,
@@ -57,21 +64,26 @@ export default function App() {
     distancia: number
   ) => {
     const localizacaoRef = doc(db, 'localizacoes', 'ultima');
-
-    await setDoc(localizacaoRef, {
-      usuario: {
-        latitude: userLat,
-        longitude: userLng,
-      },
-      esp32: {
-        latitude: espLat,
-        longitude: espLng,
-        distanciaUltrassonica: distancia,
-      },
-      timestamp: new Date(),
-    });
+    try {
+      await setDoc(localizacaoRef, {
+        usuario: {
+          latitude: userLat,
+          longitude: userLng,
+        },
+        esp32: {
+          latitude: espLat,
+          longitude: espLng,
+          distanciaUltrassonica: distancia,
+        },
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      console.warn('Erro ao salvar no Firestore:', error);
+      Alert.alert('Erro ao salvar no Firebase', 'Verifique sua conexão com a internet.');
+    }
   };
 
+  // Envia a localização atual do usuário para o ESP32
   const enviarLocalizacao = async () => {
     if (!userLocation) return;
 
@@ -87,31 +99,38 @@ export default function App() {
 
       const data = await res.json();
 
-      if (data.esp_latitude && data.esp_longitude) {
+      // Verifica se os dados retornados são válidos
+      if (
+        typeof data.esp_latitude === 'number' &&
+        typeof data.esp_longitude === 'number' &&
+        typeof data.distancia_cm === 'number'
+      ) {
         setEsp32Location({
           latitude: data.esp_latitude,
           longitude: data.esp_longitude,
         });
-      }
-
-      if (data.distancia_cm !== undefined) {
         setUltrasonicDistance(data.distancia_cm);
+
+        await salvarLocalizacaoNoFirebase(
+          userLocation.coords.latitude,
+          userLocation.coords.longitude,
+          data.esp_latitude,
+          data.esp_longitude,
+          data.distancia_cm
+        );
+      } else {
+        Alert.alert('Dados inválidos recebidos do ESP32');
       }
 
-      await salvarLocalizacaoNoFirebase(
-        userLocation.coords.latitude,
-        userLocation.coords.longitude,
-        data.esp_latitude,
-        data.esp_longitude,
-        data.distancia_cm
-      );
     } catch (err: any) {
-      Alert.alert('Erro ao conectar com o ESP32', err.message);
+      console.error('Erro ao conectar com o ESP32:', err);
+      Alert.alert('Erro ao conectar com o ESP32', err.message || 'Erro desconhecido');
     }
   };
 
   const renderMap = () => {
-    if (!userLocation) return <Text style={styles.text}>{errorMsg || 'Obtendo localização...'}</Text>;
+    if (!userLocation)
+      return <Text style={styles.text}>{errorMsg || 'Obtendo localização...'}</Text>;
 
     const region = {
       latitude: userLocation.coords.latitude,

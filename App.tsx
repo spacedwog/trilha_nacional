@@ -1,102 +1,110 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, StyleSheet, ScrollView, Alert } from 'react-native';
+import { StyleSheet, Text, View, Button, Alert, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
 
 export default function App() {
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [serverResponse, setServerResponse] = useState<string>('');
 
-  const [serverUrl] = useState('http://192.168.0.100:3000/location'); // Altere para o IP do seu servidor local ou ESP32
+  const ESP32_URL = 'http://192.168.15.166/location'; // ← IP do ESP32 em modo Access Point
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setErrorMsg('Permissão para acessar a localização foi negada');
+        setErrorMsg('Permissão negada para acessar localização');
         return;
       }
 
-      let location = await Location.getCurrentPositionAsync({});
-      setLocation(location);
+      let currentLocation = await Location.getCurrentPositionAsync({});
+      setLocation(currentLocation);
     })();
   }, []);
 
-  const sendLocation = async () => {
-    if (!location) {
-      Alert.alert("Localização não disponível ainda.");
-      return;
-    }
+  const sendLocationToESP32 = async () => {
+    if (!location) return;
 
     try {
-      const res = await fetch(serverUrl, {
+      const res = await fetch(ESP32_URL, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           latitude: location.coords.latitude,
           longitude: location.coords.longitude,
         }),
       });
 
-      const data = await res.text();
-      setServerResponse(data);
-    } catch (err) {
-      if (err instanceof Error) {
-        setServerResponse('Erro ao conectar com o servidor: ' + err.message);
-      } else {
-        setServerResponse('Erro ao conectar com o servidor: ' + String(err));
-      }
+      const text = await res.text();
+      setServerResponse(text);
+    } catch (err: any) {
+      Alert.alert('Erro ao conectar com ESP32', err.message);
     }
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>📡 GPS + HTTP (via Expo)</Text>
+    <View style={styles.container}>
+      <Text style={styles.title}>📍 GPS + Mapa + ESP32</Text>
 
       {location ? (
-        <Text style={styles.text}>
-          Latitude: {location.coords.latitude.toFixed(6)}{"\n"}
-          Longitude: {location.coords.longitude.toFixed(6)}
-        </Text>
+        <MapView
+          style={styles.map}
+          region={{
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+            latitudeDelta: 0.005,
+            longitudeDelta: 0.005,
+          }}
+        >
+          <Marker
+            coordinate={{
+              latitude: location.coords.latitude,
+              longitude: location.coords.longitude,
+            }}
+            title="Você está aqui"
+            pinColor="blue"
+          />
+        </MapView>
       ) : (
         <Text style={styles.text}>{errorMsg || 'Obtendo localização...'}</Text>
       )}
 
-      <Button title="Enviar Localização para o Servidor" onPress={sendLocation} />
+      <Button title="📡 Enviar Localização para o ESP32" onPress={sendLocationToESP32} />
 
-      {serverResponse && (
-        <>
-          <Text style={styles.subtitle}>Resposta do servidor:</Text>
-          <Text style={styles.text}>{serverResponse}</Text>
-        </>
-      )}
-    </ScrollView>
+      {serverResponse ? (
+        <Text style={styles.response}>ESP32: {serverResponse}</Text>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flexGrow: 1,
-    padding: 24,
-    justifyContent: 'center',
-    backgroundColor: '#101010',
+    flex: 1,
+    paddingTop: 50,
+    backgroundColor: '#111',
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
-    marginBottom: 20,
     color: '#00ffcc',
+    textAlign: 'center',
+    marginBottom: 10,
   },
-  subtitle: {
-    marginTop: 20,
-    fontSize: 18,
-    color: '#00ffaa',
+  map: {
+    width: Dimensions.get('window').width,
+    height: 300,
   },
   text: {
-    fontSize: 16,
-    color: '#ffffff',
+    color: '#fff',
+    textAlign: 'center',
     marginVertical: 10,
+  },
+  response: {
+    marginTop: 15,
+    color: '#0f0',
+    fontSize: 16,
+    textAlign: 'center',
   },
 });

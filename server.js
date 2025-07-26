@@ -1,73 +1,112 @@
 // server.js
 
-// 1. Primeiro, vamos importar o Firebase Admin SDK
 var admin = require("firebase-admin");
-
-// 2. Agora, vamos apontar para o seu arquivo de chave da conta de serviço.
-// Lembre-se de substituir './trilha-nacional-3ecee-firebase-adminsdk-fbsvc-4c0745c885.json'
-// pelo caminho real onde você salvou o arquivo JSON que baixou do console do Firebase.
-// Certifique-se de que o arquivo esteja na mesma pasta do seu server.js,
-// ou ajuste o caminho conforme necessário.
 var serviceAccount = require("./trilha-nacional-3ecee-firebase-adminsdk-fbsvc-4c0745c885.json");
 
-// 3. E agora, a mágica: inicializamos o Firebase Admin SDK!
-// Isso permite que seu servidor tenha acesso privilegiado aos serviços Firebase.
 admin.initializeApp({
   credential: admin.credential.cert(serviceAccount),
-  // Se você for usar o Realtime Database, adicione a databaseURL aqui,
-  // usando o ID do seu projeto. Para Cloud Firestore, não é necessário.
-  // databaseURL: "https://trilha-nacional-3ecee.firebaseio.com"
+  databaseURL: "https://trilha-nacional-3ecee.firebaseio.com"
 });
 
-// Agora, o restante do seu código Express.js
 const express = require('express');
 const app = express();
 const port = 3000;
 
-app.use(express.json()); // Habilita o Express a ler JSON no corpo das requisições
+app.use(express.json());
 
-// Rota para receber dados de localização
-// Dentro da sua rota app.post('/location', ...) no server.js
-app.post('/location', (req, res) => {
-  const { latitude, longitude } = req.body; // Latitude e longitude do usuário recebidas do App.js
-  console.log(`Recebido do App.js: Lat ${latitude}, Lon ${longitude}`);
+// Pega uma referência ao seu banco de dados Firestore
+const db = admin.firestore();
 
-  // Salva a localização do usuário no Firestore (opcional, App.js já salva a combinada)
-  // Você pode querer uma coleção separada para localizações de usuários, por exemplo.
-  // const db = admin.firestore();
-  // db.collection('user_locations').add({
-  //   latitude: latitude,
-  //   longitude: longitude,
-  //   timestamp: admin.firestore.FieldValue.serverTimestamp()
-  // }).then(() => console.log('Localização do usuário salva por server.js'));
+// --- NOVO ENDPOINT: Para o ESP32 enviar sua própria localização e distância ---
+// Simula o ESP32 enviando seus dados para o servidor
+// Em um cenário real, o seu ESP32 faria uma requisição POST para este endpoint.
+app.post('/esp32_update', async (req, res) => {
+  const { latitude, longitude, distancia_cm } = req.body;
 
-  // *** IMPORTANTE: Simula a resposta do "ESP32" ***
-  // Aqui você retornaria dados reais do ESP32 se ele enviasse para este servidor.
-  // Por enquanto, vamos simular:
-  const mockEsp32Lat = -23.562913; // Ex: Uma localização próxima ao Masp, para simular o ESP32
-  const mockEsp32Lon = -46.626880;
-  const mockDistance = Math.floor(Math.random() * 200) + 50; // Distância aleatória entre 50 e 250 cm
+  if (typeof latitude !== 'number' || typeof longitude !== 'number' || typeof distancia_cm !== 'number') {
+    return res.status(400).send('Dados inválidos: latitude, longitude e distancia_cm são obrigatórios e devem ser números.');
+  }
 
-  // Envia a resposta JSON que o App.js espera
-  res.json({
-    esp_latitude: mockEsp32Lat,
-    esp_longitude: mockEsp32Lon,
-    distancia_cm: mockDistance
-  });
+  console.log(`Recebido do ESP32 (simulado): Lat ${latitude}, Lon ${longitude}, Dist ${distancia_cm} cm`);
 
-  // Se você também quiser salvar o mock no Realtime DB, faça aqui:
-  // const dbRT = admin.database();
-  // dbRT.ref('esp32_data').push({
-  //   latitude: mockEsp32Lat,
-  //   longitude: mockEsp32Lon,
-  //   distancia_cm: mockDistance,
-  //   timestamp: admin.database.ServerValue.TIMESTAMP
-  // });
-
+  try {
+    // Salva a última localização e distância do ESP32 em um documento específico
+    await db.collection('esp32_state').doc('current_location').set({
+      latitude: latitude,
+      longitude: longitude,
+      distanciaUltrassonica: distancia_cm,
+      timestamp: admin.firestore.FieldValue.serverTimestamp() // Timestamp do servidor
+    });
+    console.log('Dados do ESP32 salvos em esp32_state/current_location no Firestore.');
+    res.status(200).send('Dados do ESP32 recebidos e salvos com sucesso!');
+  } catch (error) {
+    console.error('Erro ao salvar dados do ESP32 no Firestore:', error);
+    res.status(500).send('Erro ao processar e salvar dados do ESP32.');
+  }
 });
 
-// Inicia o servidor Express
+
+// --- ENDPOINT EXISTENTE (renomeado): Para o Aplicativo React Native ---
+// Agora, este endpoint irá buscar a última localização do ESP32 no Firestore.
+app.post('/get_combined_location', async (req, res) => {
+  const { latitude, longitude } = req.body; // Latitude e longitude do usuário do App.js
+
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+    return res.status(400).send('Dados inválidos: latitude e longitude do usuário são obrigatórias e devem ser números.');
+  }
+
+  console.log(`Recebido do App.js (Localização do Usuário): Lat ${latitude}, Lon ${longitude}`);
+
+  let esp32Data = { latitude: 0, longitude: 0, distanciaUltrassonica: 0 }; // Default ou erro
+  try {
+    // 1. Busca a última localização e distância do ESP32 no Firestore
+    const esp32Doc = await db.collection('esp32_state').doc('current_location').get();
+    if (esp32Doc.exists) {
+      esp32Data = esp32Doc.data();
+      console.log('Últimos dados do ESP32 lidos do Firestore:', esp32Data);
+    } else {
+      console.warn('Nenhum dado do ESP32 encontrado no Firestore em esp32_state/current_location.');
+      // Você pode definir um fallback ou retornar um erro se o dado do ESP32 for crítico
+    }
+  } catch (error) {
+    console.error('Erro ao ler dados do ESP32 do Firestore:', error);
+    // Continuar mesmo com erro na leitura do ESP32, mas com dados padrão ou vazios
+  }
+
+  try {
+    // 2. Salva a localização combinada (usuário + ESP32) no Firestore
+    const localizacaoRef = db.collection('localizacoes').doc('ultima'); // Sobrescreve o último registro
+    await localizacaoRef.set({
+      usuario: {
+        latitude: latitude,
+        longitude: longitude,
+      },
+      esp32: {
+        latitude: esp32Data.latitude,
+        longitude: esp32Data.longitude,
+        distanciaUltrassonica: esp32Data.distanciaUltrassonica,
+      },
+      timestamp: admin.firestore.FieldValue.serverTimestamp(), // Timestamp do servidor
+    });
+    console.log('Localização combinada salva no Firestore (localizacoes/ultima).');
+
+    // 3. Responde ao aplicativo React Native com os dados do ESP32
+    // O aplicativo usará estes dados para exibir o marcador do ESP32 no mapa
+    res.status(200).json({
+      esp_latitude: esp32Data.latitude,
+      esp_longitude: esp32Data.longitude,
+      distancia_cm: esp32Data.distanciaUltrassonica
+    });
+
+  } catch (error) {
+    console.error('Erro ao salvar localização combinada ou responder ao App.js:', error);
+    res.status(500).send('Erro interno ao processar sua solicitação.');
+  }
+});
+
+// --- Inicia o Servidor ---
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
-  console.log('Firebase Admin SDK inicializado e pronto para uso!');
+  console.log('Firebase Admin SDK inicializado.');
+  console.log('Aguardando requisições em /esp32_update (do ESP32) e /get_combined_location (do App.js).');
 });

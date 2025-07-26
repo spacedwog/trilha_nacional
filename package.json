@@ -17,7 +17,6 @@
     "expo": "~53.0.20",
     "expo-dev-client": "~5.2.4",
     "expo-location": "~18.1.6",
-    "expo-notifications": "~0.31.4",
     "expo-status-bar": "~2.2.3",
     "express": "^5.1.0",
     "react": "19.0.0",

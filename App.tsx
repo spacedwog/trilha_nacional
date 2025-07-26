@@ -1,110 +1,106 @@
+// App.tsx
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, Button, Alert, Dimensions } from 'react-native';
-import * as Location from 'expo-location';
-import MapView, { Marker } from 'react-native-maps';
+import { View, Text, Button, ScrollView, StyleSheet, Dimensions } from 'react-native';
+import * as Notifications from 'expo-notifications';
+import { LineChart } from 'react-native-chart-kit';
+
+const largura = Dimensions.get('window').width;
+
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: false,
+    shouldSetBadge: false,
+    shouldShowBanner: true,
+    shouldShowList: true,
+  }),
+});
 
 export default function App() {
-  const [location, setLocation] = useState<Location.LocationObject | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [serverResponse, setServerResponse] = useState<string>('');
+  const [distancia, setDistancia] = useState<number | null>(null);
+  const [historico, setHistorico] = useState<number[]>([]);
+  const [localizacao, setLocalizacao] = useState<{ lat: number, lon: number } | null>(null);
 
-  const ESP32_URL = 'http://192.168.4.1/location'; // ← IP do ESP32 em modo Access Point
+  async function enviarNotificacao(distancia: number) {
+    if (distancia < 30) {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: "🚨 Objeto detectado!",
+          body: `Distância: ${distancia} cm`,
+        },
+        trigger: null,
+      });
+    }
+  }
+
+  async function buscarDadosDoESP32() {
+    try {
+      const response = await fetch('http://192.168.15.166/dados');
+      const data = await response.json();
+      setDistancia(data.distancia_cm);
+      setLocalizacao({ lat: data.lat, lon: data.lon });
+      setHistorico((prev) => [...prev.slice(-9), data.distancia_cm]);
+      await enviarNotificacao(data.distancia_cm);
+    } catch (err) {
+      console.error('Erro ao buscar dados do ESP32:', err);
+    }
+  }
 
   useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setErrorMsg('Permissão negada para acessar localização');
-        return;
-      }
-
-      let currentLocation = await Location.getCurrentPositionAsync({});
-      setLocation(currentLocation);
-    })();
+    const intervalo = setInterval(buscarDadosDoESP32, 5000); // Atualiza a cada 5 segundos
+    return () => clearInterval(intervalo);
   }, []);
 
-  const sendLocationToESP32 = async () => {
-    if (!location) return;
-
-    try {
-      const res = await fetch(ESP32_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        }),
-      });
-
-      const text = await res.text();
-      setServerResponse(text);
-    } catch (err: any) {
-      Alert.alert('Erro ao conectar com ESP32', err.message);
-    }
-  };
-
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>📍 GPS + Mapa + ESP32</Text>
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.titulo}>Dashboard ESP32</Text>
 
-      {location ? (
-        <MapView
-          style={styles.map}
-          region={{
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-            latitudeDelta: 0.005,
-            longitudeDelta: 0.005,
-          }}
-        >
-          <Marker
-            coordinate={{
-              latitude: location.coords.latitude,
-              longitude: location.coords.longitude,
-            }}
-            title="Você está aqui"
-            pinColor="blue"
-          />
-        </MapView>
-      ) : (
-        <Text style={styles.text}>{errorMsg || 'Obtendo localização...'}</Text>
+      <Text style={styles.texto}>Distância atual: {distancia ?? '--'} cm</Text>
+
+      {localizacao && (
+        <Text style={styles.texto}>GPS: {localizacao.lat.toFixed(5)}, {localizacao.lon.toFixed(5)}</Text>
       )}
 
-      <Button title="📡 Enviar Localização para o ESP32" onPress={sendLocationToESP32} />
+      <LineChart
+        data={{
+          labels: historico.map((_, i) => `${i + 1}s`),
+          datasets: [{ data: historico.length > 0 ? historico : [0] }],
+        }}
+        width={largura - 40}
+        height={220}
+        yAxisSuffix="cm"
+        chartConfig={{
+          backgroundColor: '#e26a00',
+          backgroundGradientFrom: '#fb8c00',
+          backgroundGradientTo: '#ffa726',
+          decimalPlaces: 0,
+          color: (opacity = 1) => `rgba(255, 255, 255, ${opacity})`,
+          style: { borderRadius: 16 },
+        }}
+        style={{ marginVertical: 10, borderRadius: 16 }}
+      />
 
-      {serverResponse ? (
-        <Text style={styles.response}>ESP32: {serverResponse}</Text>
-      ) : null}
-    </View>
+      <Button title="Atualizar Agora" onPress={buscarDadosDoESP32} />
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
-    paddingTop: 50,
-    backgroundColor: '#111',
+    flexGrow: 1,
+    padding: 20,
+    alignItems: 'center',
+    backgroundColor: '#121212',
   },
-  title: {
-    fontSize: 22,
+  titulo: {
+    fontSize: 26,
     fontWeight: 'bold',
-    color: '#00ffcc',
-    textAlign: 'center',
+    color: '#fff',
     marginBottom: 10,
   },
-  map: {
-    width: Dimensions.get('window').width,
-    height: 300,
-  },
-  text: {
-    color: '#fff',
-    textAlign: 'center',
-    marginVertical: 10,
-  },
-  response: {
-    marginTop: 15,
-    color: '#0f0',
+  texto: {
     fontSize: 16,
-    textAlign: 'center',
+    color: '#ddd',
+    marginBottom: 5,
   },
 });

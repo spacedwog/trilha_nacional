@@ -2,6 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, View, Button, Alert, Dimensions } from 'react-native';
 import * as Location from 'expo-location';
 import MapView, { Marker } from 'react-native-maps';
+import { initializeApp } from 'firebase/app';
+import { getFirestore, doc, setDoc } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: 'SUA_API_KEY',
+  authDomain: 'seu-app.firebaseapp.com',
+  projectId: 'seu-app',
+  storageBucket: 'seu-app.appspot.com',
+  messagingSenderId: '1234567890',
+  appId: '1:1234567890:web:abcdefghij',
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
 
 const ESP32_URL = 'http://192.168.15.166/location'; // 🧠 Modo STA do ESP32
 
@@ -24,7 +38,6 @@ export default function App() {
         setUserLocation(currentLocation);
       } catch (err) {
         console.warn('Erro ao obter localização, usando fallback:', err);
-        // Fallback manual: São Paulo
         setUserLocation({
           coords: {
             latitude: -23.561684, longitude: -46.625378, accuracy: 0, altitude: 0, heading: 0, speed: 0,
@@ -35,6 +48,29 @@ export default function App() {
       }
     })();
   }, []);
+
+  const salvarLocalizacaoNoFirebase = async (
+    userLat: number,
+    userLng: number,
+    espLat: number,
+    espLng: number,
+    distancia: number
+  ) => {
+    const localizacaoRef = doc(db, 'localizacoes', 'ultima');
+
+    await setDoc(localizacaoRef, {
+      usuario: {
+        latitude: userLat,
+        longitude: userLng,
+      },
+      esp32: {
+        latitude: espLat,
+        longitude: espLng,
+        distanciaUltrassonica: distancia,
+      },
+      timestamp: new Date(),
+    });
+  };
 
   const enviarLocalizacao = async () => {
     if (!userLocation) return;
@@ -61,6 +97,14 @@ export default function App() {
       if (data.distancia_cm !== undefined) {
         setUltrasonicDistance(data.distancia_cm);
       }
+
+      await salvarLocalizacaoNoFirebase(
+        userLocation.coords.latitude,
+        userLocation.coords.longitude,
+        data.esp_latitude,
+        data.esp_longitude,
+        data.distancia_cm
+      );
     } catch (err: any) {
       Alert.alert('Erro ao conectar com o ESP32', err.message);
     }
@@ -78,7 +122,6 @@ export default function App() {
 
     return (
       <MapView style={styles.map} region={region}>
-        {/* Usuário */}
         <Marker
           coordinate={{
             latitude: userLocation.coords.latitude,
@@ -88,7 +131,6 @@ export default function App() {
           pinColor="blue"
         />
 
-        {/* ESP32 */}
         {esp32Location && (
           <Marker
             coordinate={{

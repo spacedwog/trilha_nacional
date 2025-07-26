@@ -1,20 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, Button, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Button, StyleSheet, ScrollView, Alert } from 'react-native';
 import * as Location from 'expo-location';
-import TcpSocket from 'react-native-tcp-socket';
 
 export default function App() {
-  const [location, setLocation] = useState<any>(null);
+  const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [tcpStatus, setTcpStatus] = useState<string>('Desconectado');
-  const [receivedData, setReceivedData] = useState<string>('');
-  const [client, setClient] = useState<any>(null);
+  const [serverResponse, setServerResponse] = useState<string>('');
+
+  const [serverUrl] = useState('http://192.168.0.100:3000/location'); // Altere para o IP do seu servidor local ou ESP32
 
   useEffect(() => {
     (async () => {
       let { status } = await Location.requestForegroundPermissionsAsync();
       if (status !== 'granted') {
-        setErrorMsg('Permissão para localização negada.');
+        setErrorMsg('Permissão para acessar a localização foi negada');
         return;
       }
 
@@ -23,57 +22,56 @@ export default function App() {
     })();
   }, []);
 
-  const connectToServer = () => {
-    const options = {
-      port: 1234, // porta do servidor TCP
-      host: '192.168.15.166', // IP do servidor (ex: ESP32 ou servidor local)
-      reuseAddress: true,
-    };
+  const sendLocation = async () => {
+    if (!location) {
+      Alert.alert("Localização não disponível ainda.");
+      return;
+    }
 
-    const newClient = TcpSocket.createConnection(options, () => {
-      setTcpStatus('Conectado');
-      newClient.write('Cliente conectado.\n');
-    });
+    try {
+      const res = await fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+        }),
+      });
 
-    newClient.on('data', function (data: string | Buffer) {
-      setReceivedData((prev) => prev + (typeof data === 'string' ? data : data.toString()));
-    });
-
-    newClient.on('error', function (error: any) {
-      setTcpStatus('Erro: ' + error.message);
-    });
-
-    newClient.on('close', function () {
-      setTcpStatus('Conexão fechada');
-    });
-
-    setClient(newClient);
-  };
-
-  const sendLocation = () => {
-    if (client && location) {
-      const { latitude, longitude } = location.coords;
-      client.write(`Localização: ${latitude}, ${longitude}\n`);
+      const data = await res.text();
+      setServerResponse(data);
+    } catch (err) {
+      if (err instanceof Error) {
+        setServerResponse('Erro ao conectar com o servidor: ' + err.message);
+      } else {
+        setServerResponse('Erro ao conectar com o servidor: ' + String(err));
+      }
     }
   };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.header}>App TCP/IP + GPS</Text>
-      <Text style={styles.label}>Status da Conexão: {tcpStatus}</Text>
+      <Text style={styles.title}>📡 GPS + HTTP (via Expo)</Text>
 
-      <Button title="Conectar ao Servidor TCP" onPress={connectToServer} />
-      <Button title="Enviar Localização" onPress={sendLocation} />
-
-      {location && (
-        <Text style={styles.label}>
-          Localização Atual: {location.coords.latitude}, {location.coords.longitude}
+      {location ? (
+        <Text style={styles.text}>
+          Latitude: {location.coords.latitude.toFixed(6)}{"\n"}
+          Longitude: {location.coords.longitude.toFixed(6)}
         </Text>
+      ) : (
+        <Text style={styles.text}>{errorMsg || 'Obtendo localização...'}</Text>
       )}
-      {errorMsg && <Text style={styles.error}>{errorMsg}</Text>}
 
-      <Text style={styles.label}>Dados Recebidos do Servidor:</Text>
-      <Text style={styles.data}>{receivedData}</Text>
+      <Button title="Enviar Localização para o Servidor" onPress={sendLocation} />
+
+      {serverResponse && (
+        <>
+          <Text style={styles.subtitle}>Resposta do servidor:</Text>
+          <Text style={styles.text}>{serverResponse}</Text>
+        </>
+      )}
     </ScrollView>
   );
 }
@@ -81,27 +79,24 @@ export default function App() {
 const styles = StyleSheet.create({
   container: {
     flexGrow: 1,
-    padding: 20,
+    padding: 24,
     justifyContent: 'center',
-    backgroundColor: '#121212',
+    backgroundColor: '#101010',
   },
-  header: {
-    fontSize: 22,
+  title: {
+    fontSize: 24,
     fontWeight: 'bold',
-    color: '#00ff99',
     marginBottom: 20,
+    color: '#00ffcc',
   },
-  label: {
+  subtitle: {
+    marginTop: 20,
+    fontSize: 18,
+    color: '#00ffaa',
+  },
+  text: {
     fontSize: 16,
-    marginVertical: 8,
     color: '#ffffff',
-  },
-  error: {
-    color: 'red',
-  },
-  data: {
-    color: '#ccc',
-    fontSize: 14,
-    marginTop: 10,
+    marginVertical: 10,
   },
 });

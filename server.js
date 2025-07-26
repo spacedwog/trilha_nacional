@@ -1,19 +1,16 @@
 // server.js
-const net = require('net');
+const express = require('express');
+const app = express();
+const port = 3000;
 
-const server = net.createServer((socket) => {
-  console.log('Cliente conectado');
+app.use(express.json());
 
-  socket.on('data', (data) => {
-    console.log('Recebido:', data.toString());
-    socket.write('Mensagem recebida com sucesso!\n');
-  });
-
-  socket.on('end', () => {
-    console.log('Cliente desconectado');
-  });
+app.post('/location', (req, res) => {
+  const { latitude, longitude } = req.body;
+  console.log(`Recebido: Lat ${latitude}, Lon ${longitude}`);
+  res.send('Localização recebida com sucesso!');
 });
 
-server.listen(3000, () => {
-  console.log('Servidor TCP ouvindo na porta 3000');
+app.listen(port, () => {
+  console.log(`Servidor rodando em http://localhost:${port}`);
 });

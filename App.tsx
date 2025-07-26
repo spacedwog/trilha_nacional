@@ -6,8 +6,8 @@ import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyABWthQjkzaRQL7HFQv_LayVdvWK4dZNX8',
-  authDomain: 'https://github.com/firebase/firebase-ios-sdk',
+  apiKey: 'AIzaSyABWthQjkzaRQL7HFQv_LayVdvWK4dZNX8', // Use sua chave API real aqui!
+  authDomain: 'trilha-nacional-3ecee.firebaseapp.com', // ✅ Corrigido para o seu domínio do projeto Firebase Hosting
   projectId: 'trilha-nacional-3ecee',
   storageBucket: 'trilha-nacional-3ecee.firebasestorage.app',
   messagingSenderId: '6939870526',
@@ -39,6 +39,7 @@ export default function App() {
         setUserLocation(currentLocation);
       } catch (err) {
         console.warn('Erro ao obter localização, usando fallback:', err);
+        // Fallback para uma localização fixa se a obtenção falhar
         setUserLocation({
           coords: {
             latitude: -23.561684,
@@ -77,15 +78,21 @@ export default function App() {
         },
         timestamp: new Date(),
       });
+      // ✅ Alerta de sucesso: Se chegamos aqui, os dados foram enviados com sucesso!
+      Alert.alert('Sucesso!', 'Dados de localização enviados ao Firebase!');
     } catch (error) {
       console.warn('Erro ao salvar no Firestore:', error);
-      Alert.alert('Erro ao salvar no Firebase', 'Verifique sua conexão com a internet.');
+      // ✅ Alerta de erro: Este é o alerta para quando o save REALMENTE falha.
+      Alert.alert('Erro ao salvar no Firebase', 'Não foi possível enviar os dados. Verifique sua conexão com a internet ou as permissões do Firebase.');
     }
   };
 
-  // Envia a localização atual do usuário para o ESP32
+  // Envia a localização atual do usuário para o ESP32 e recebe a do ESP32
   const enviarLocalizacao = async () => {
-    if (!userLocation) return;
+    if (!userLocation) {
+        Alert.alert('Localização do usuário não disponível', 'Aguarde a obtenção da sua localização.');
+        return;
+    }
 
     try {
       const res = await fetch(ESP32_URL, {
@@ -97,9 +104,12 @@ export default function App() {
         }),
       });
 
+      if (!res.ok) {
+        throw new Error(`Erro HTTP: ${res.status} - ${res.statusText}`);
+      }
+
       const data = await res.json();
 
-      // Verifica se os dados retornados são válidos
       if (
         typeof data.esp_latitude === 'number' &&
         typeof data.esp_longitude === 'number' &&
@@ -119,15 +129,16 @@ export default function App() {
           data.distancia_cm
         );
       } else {
-        Alert.alert('Dados inválidos recebidos do ESP32');
+        Alert.alert('Dados inválidos recebidos do ESP32', 'Verifique a resposta do seu dispositivo.');
       }
 
     } catch (err: any) {
       console.error('Erro ao conectar com o ESP32:', err);
-      Alert.alert('Erro ao conectar com o ESP32', err.message || 'Erro desconhecido');
+      Alert.alert('Erro ao conectar com o ESP32', err.message || 'Erro desconhecido ao tentar comunicação.');
     }
   };
 
+  // Renderiza o componente MapView com os marcadores
   const renderMap = () => {
     if (!userLocation)
       return <Text style={styles.text}>{errorMsg || 'Obtendo localização...'}</Text>;

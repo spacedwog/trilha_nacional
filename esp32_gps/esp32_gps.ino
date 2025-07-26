@@ -1,73 +1,77 @@
-// ESP32 - Código em Modo STA com Sensor Ultrassônico e GPS
-
 #include <WiFi.h>
 #include <WebServer.h>
-#include <TinyGPSPlus.h>
-#include <HardwareSerial.h>
+#include <ArduinoJson.h>
 
-// Defina suas credenciais Wi-Fi
-const char* ssid = "FAMILIA SANTOS";
-const char* password = "6z2h1j3k9f";
+#define TRIG 5
+#define ECHO 18
 
-// Pinos do sensor ultrassônico
-const int trigPin = 5;
-const int echoPin = 18;
-
-// GPS (UART2)
-HardwareSerial gpsSerial(2);
-TinyGPSPlus gps;
+const char* ssid = "FAMILIA SANTOS";       // 🔁 Troque aqui
+const char* password = "6z2h1j3k9f";      // 🔁 Troque aqui
 
 WebServer server(80);
 
-float distanciaCM() {
-  digitalWrite(trigPin, LOW);
+float latitudeESP = -23.561234;
+float longitudeESP = -46.654321;
+
+long medirDistancia() {
+  digitalWrite(TRIG, LOW);
   delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
+  digitalWrite(TRIG, HIGH);
   delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
-  long duracao = pulseIn(echoPin, HIGH, 30000);
-  return duracao * 0.034 / 2;
-}
+  digitalWrite(TRIG, LOW);
 
-void handleRoot() {
-  float distancia = distanciaCM();
-
-  // Atualiza o GPS
-  while (gpsSerial.available() > 0) {
-    gps.encode(gpsSerial.read());
-  }
-
-  float lat = gps.location.isValid() ? gps.location.lat() : 0.0;
-  float lon = gps.location.isValid() ? gps.location.lng() : 0.0;
-
-  String json = "{";
-  json += "\"distancia_cm\":" + String(distancia, 2) + ",";
-  json += "\"lat\":" + String(lat, 6) + ",";
-  json += "\"lon\":" + String(lon, 6);
-  json += "}";
-
-  server.send(200, "application/json", json);
+  long duracao = pulseIn(ECHO, HIGH);
+  long distancia_cm = duracao * 0.034 / 2;
+  return distancia_cm;
 }
 
 void setup() {
   Serial.begin(115200);
-  gpsSerial.begin(9600, SERIAL_8N1, 16, 17); // RX, TX
-
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
+  pinMode(TRIG, OUTPUT);
+  pinMode(ECHO, INPUT);
 
   WiFi.begin(ssid, password);
-  Serial.print("Conectando-se ao Wi-Fi");
+  Serial.print("Conectando à rede Wi-Fi");
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
   }
+
   Serial.println("\nConectado!");
+  Serial.print("Endereço IP: ");
   Serial.println(WiFi.localIP());
 
-  server.on("/dados", handleRoot);
+  server.on("/location", HTTP_POST, []() {
+    if (!server.hasArg("plain")) {
+      server.send(400, "application/json", "{\"error\": \"Sem corpo JSON\"}");
+      return;
+    }
+
+    StaticJsonDocument<200> doc;
+    DeserializationError error = deserializeJson(doc, server.arg("plain"));
+    if (error) {
+      server.send(400, "application/json", "{\"error\": \"JSON inválido\"}");
+      return;
+    }
+
+    float lat_cliente = doc["latitude"];
+    float lon_cliente = doc["longitude"];
+    Serial.printf("Cliente em: %.6f, %.6f\n", lat_cliente, lon_cliente);
+
+    long distancia = medirDistancia();
+    Serial.printf("Distância medida: %ld cm\n", distancia);
+
+    StaticJsonDocument<200> response;
+    response["esp_latitude"] = latitudeESP;
+    response["esp_longitude"] = longitudeESP;
+    response["distancia_cm"] = distancia;
+
+    String res;
+    serializeJson(response, res);
+    server.send(200, "application/json", res);
+  });
+
   server.begin();
-  Serial.println("Servidor HTTP iniciado");
 }
 
 void loop() {

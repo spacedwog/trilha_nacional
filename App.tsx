@@ -8,7 +8,7 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [serverResponse, setServerResponse] = useState<string>('');
 
-  const ESP32_URL = 'http://192.168.15.166/location'; // ← IP do ESP32 em modo Access Point
+  const ESP32_URL = 'http://192.168.4.1/location'; // ← IP do ESP32 em modo Access Point
 
   useEffect(() => {
     (async () => {

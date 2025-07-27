@@ -20,7 +20,7 @@ const db = admin.firestore();
 // --- NOVO ENDPOINT: Para o ESP32 enviar sua própria localização e distância ---
 // Simula o ESP32 enviando seus dados para o servidor
 // Em um cenário real, o seu ESP32 faria uma requisição POST para este endpoint.
-app.post('/esp32_update', async (req, res) => {
+app.post('/location', async (req, res) => {
   const { latitude, longitude, distancia_cm } = req.body;
 
   if (typeof latitude !== 'number' || typeof longitude !== 'number' || typeof distancia_cm !== 'number') {
@@ -108,5 +108,5 @@ app.post('/get_combined_location', async (req, res) => {
 app.listen(port, () => {
   console.log(`Servidor rodando em http://localhost:${port}`);
   console.log('Firebase Admin SDK inicializado.');
-  console.log('Aguardando requisições em /esp32_update (do ESP32) e /get_combined_location (do App.js).');
+  console.log('Aguardando requisições em /location (do ESP32) e /get_combined_location (do App.js).');
 });

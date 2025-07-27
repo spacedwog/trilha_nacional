@@ -22,7 +22,7 @@ const db = getFirestore(app);
 // >>> MUDANÇA AQUI: NOVO ENDPOINT QUE BUSCA A LOCALIZAÇÃO DO ESP32 DO FIRESTORE <<<
 // Certifique-se de que este IP é o IP da máquina onde o seu server.js está rodando!
 const SERVER_URL = 'http://192.168.15.166:3000'; // IP do seu server.js + porta
-const GET_COMBINED_LOCATION_ENDPOINT = `${SERVER_URL}/get_combined_location`;
+const GET_COMBINED_LOCATION_ENDPOINT = `${SERVER_URL}/location`; // Endpoint que o server.js expõe para obter a localização combinada
 
 export default function App() {
   const [userLocation, setUserLocation] = useState<Location.LocationObject | null>(null);
@@ -207,7 +207,7 @@ export default function App() {
         {renderMap()}
       </View>
       <View style={styles.buttonContainer}>
-        <Button title="📡 Enviar e Obter Localização" onPress={enviarLocalizacao} color="#00ffcc" />
+        <Button title="📡 Enviar e Obter Localização" onPress={enviarLocalizacao} color="#000000" />
       </View>
       {ultrasonicDistance !== null && (
         <Text style={styles.text}>
